@@ -144,18 +144,25 @@ if DATABASE_URL:
         }
     }
 else:
-    DATABASES = {
-        "default": {
-            "ENGINE": config(
-                "DATABASE_ENGINE",
-                default="django.db.backends.sqlite3"
-            ),
-            "NAME": BASE_DIR / config(
-                "DATABASE_NAME",
-                default="db.sqlite3"
-            ),
+    engine = config("DATABASE_ENGINE", default="django.db.backends.sqlite3")
+    if "postgresql" in engine:
+        DATABASES = {
+            "default": {
+                "ENGINE": "django.db.backends.postgresql",
+                "NAME": config("POSTGRES_DB", default="university_industry_linkage"),
+                "USER": config("POSTGRES_USER", default="postgres"),
+                "PASSWORD": config("POSTGRES_PASSWORD", default=""),
+                "HOST": config("POSTGRES_HOST", default="localhost"),
+                "PORT": config("POSTGRES_PORT", default="5432"),
+            }
         }
-    }
+    else:
+        DATABASES = {
+            "default": {
+                "ENGINE": engine,
+                "NAME": BASE_DIR / config("DATABASE_NAME", default="db.sqlite3"),
+            }
+        }
 
 # ==========================
 # PASSWORD VALIDATION
