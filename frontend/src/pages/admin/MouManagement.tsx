@@ -22,6 +22,7 @@ import {
   Chip,
   IconButton,
   CircularProgress,
+  Typography,
 } from "@mui/material";
 import { Add, Edit, Delete, Search, FilePresent } from "@mui/icons-material";
 import client from "../../apis/client";
@@ -50,6 +51,11 @@ export const MouManagement: React.FC = () => {
     signed_by_institution: "",
     description: "",
   });
+
+  const [uploadNewFile, setUploadNewFile] = useState(false);
+  const [newFile, setNewFile] = useState<File | null>(null);
+  const [newFileTitle, setNewFileTitle] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const fetchMoUs = async () => {
     setLoading(true);
@@ -92,6 +98,9 @@ export const MouManagement: React.FC = () => {
       signed_by_institution: "",
       description: "",
     });
+    setUploadNewFile(false);
+    setNewFile(null);
+    setNewFileTitle("");
     setOpenForm(true);
   };
 
@@ -107,6 +116,9 @@ export const MouManagement: React.FC = () => {
       signed_by_institution: mou.signed_by_institution,
       description: mou.description || "",
     });
+    setUploadNewFile(false);
+    setNewFile(null);
+    setNewFileTitle("");
     setOpenForm(true);
   };
 
@@ -119,24 +131,70 @@ export const MouManagement: React.FC = () => {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.institution || !formData.document || !formData.start_date || !formData.end_date) {
-      toast.error("Institution, Document File link, and Date spans are required.");
+    
+    if (!formData.institution || !formData.start_date || !formData.end_date) {
+      toast.error("Institution and Date spans are required.");
       return;
     }
 
+    if (!uploadNewFile && !formData.document) {
+      toast.error("Please select an existing MoU PDF File Record.");
+      return;
+    }
+
+    if (uploadNewFile && !newFile) {
+      toast.error("Please select a PDF file to upload.");
+      return;
+    }
+
+    setSaving(true);
     try {
+      let finalDocId = formData.document;
+
+      if (uploadNewFile && newFile) {
+        const fileData = new FormData();
+        const instName = institutions.find(i => String(i.id) === String(formData.institution))?.name || "Partner";
+        const title = newFileTitle.trim() || `MoU Document - ${instName}`;
+        
+        fileData.append("title", title);
+        fileData.append("file", newFile);
+        fileData.append("document_type", "MOU");
+        fileData.append("is_public", "true");
+        fileData.append("institution", formData.institution);
+
+        const fileUploadRes = await client.post("/documents/files/", fileData, {
+          headers: { "Content-Type": "multipart/form-data" }
+        });
+        
+        const uploadedDoc = fileUploadRes.data.data || fileUploadRes.data;
+        if (uploadedDoc && uploadedDoc.id) {
+          finalDocId = String(uploadedDoc.id);
+        } else {
+          throw new Error("Failed to retrieve uploaded document ID.");
+        }
+      }
+
+      const savePayload = {
+        ...formData,
+        document: finalDocId,
+      };
+
       if (editId) {
-        await client.put(`/documents/mous/${editId}/`, formData);
+        await client.put(`/documents/mous/${editId}/`, savePayload);
         toast.success("MoU details modified successfully.");
       } else {
-        await client.post("/documents/mous/", formData);
+        await client.post("/documents/mous/", savePayload);
         toast.success("New legal MoU registered successfully.");
       }
       fetchMoUs();
+      fetchMetadata();
       setOpenForm(false);
     } catch (err: any) {
       console.error(err);
-      toast.error("An error occurred while saving MoU.");
+      const serverErr = err.response?.data?.error || err.response?.data?.detail || "An error occurred while saving MoU.";
+      toast.error(typeof serverErr === "string" ? serverErr : "An error occurred while saving MoU.");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -225,8 +283,8 @@ export const MouManagement: React.FC = () => {
                       />
                     </TableCell>
                     <TableCell sx={{ textAlign: "right" }}>
-                      {mou.document_details?.file && (
-                        <IconButton size="small" href={mou.document_details.file} target="_blank" color="primary" sx={{ mr: 1 }}>
+                      {mou.document_file && (
+                        <IconButton size="small" href={mou.document_file} target="_blank" color="primary" sx={{ mr: 1 }}>
                           <FilePresent fontSize="small" />
                         </IconButton>
                       )}
@@ -265,19 +323,81 @@ export const MouManagement: React.FC = () => {
             </Select>
           </FormControl>
 
-          <FormControl fullWidth required>
-            <InputLabel>MoU PDF File Record</InputLabel>
-            <Select
-              name="document"
-              value={formData.document}
-              label="MoU PDF File Record"
-              onChange={handleInputChange}
-            >
-              {documents.map((doc) => (
-                <MenuItem key={doc.id} value={doc.id}>{doc.title}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2, p: 2, backgroundColor: "rgba(0,0,0,0.01)" }}>
+            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 800, color: "text.primary" }}>
+                MoU PDF File Record
+              </Typography>
+              <Button 
+                size="small" 
+                onClick={() => setUploadNewFile(!uploadNewFile)} 
+                sx={{ fontWeight: 800, textTransform: "none" }}
+              >
+                {uploadNewFile ? "Select Existing File" : "Upload New File"}
+              </Button>
+            </Box>
+
+            {uploadNewFile ? (
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                <TextField
+                  fullWidth
+                  label="Document Title"
+                  placeholder="e.g. Legal Agreement MoU 2026"
+                  value={newFileTitle}
+                  onChange={(e) => setNewFileTitle(e.target.value)}
+                />
+                <Button
+                  variant="outlined"
+                  component="label"
+                  sx={{
+                    py: 1.5,
+                    borderStyle: "dashed",
+                    borderWidth: 2,
+                    borderColor: "primary.main",
+                    backgroundColor: "rgba(0, 48, 20, 0.02)",
+                    "&:hover": {
+                      borderColor: "primary.dark",
+                      backgroundColor: "rgba(0, 48, 20, 0.05)",
+                    }
+                  }}
+                >
+                  {newFile ? `Selected: ${newFile.name}` : "Select MoU PDF File"}
+                  <input
+                    type="file"
+                    hidden
+                    accept=".pdf"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        setNewFile(e.target.files[0]);
+                        if (!newFileTitle) {
+                          const rawName = e.target.files[0].name.replace(/\.[^/.]+$/, "");
+                          setNewFileTitle(rawName);
+                        }
+                      }
+                    }}
+                  />
+                </Button>
+              </Box>
+            ) : (
+              <FormControl fullWidth required={!uploadNewFile}>
+                <InputLabel>Choose from Uploaded PDF Files</InputLabel>
+                <Select
+                  name="document"
+                  value={formData.document}
+                  label="Choose from Uploaded PDF Files"
+                  onChange={handleInputChange}
+                >
+                  {documents.length === 0 ? (
+                    <MenuItem disabled value="">No files uploaded yet. Select 'Upload New File' above.</MenuItem>
+                  ) : (
+                    documents.map((doc) => (
+                      <MenuItem key={doc.id} value={doc.id}>{doc.title}</MenuItem>
+                    ))
+                  )}
+                </Select>
+              </FormControl>
+            )}
+          </Box>
 
           <Grid container spacing={2}>
             <Grid size={{ xs: 6 }}>
@@ -351,8 +471,10 @@ export const MouManagement: React.FC = () => {
           />
         </DialogContent>
         <DialogActions sx={{ p: 2.5 }}>
-          <Button onClick={() => setOpenForm(false)}>Cancel</Button>
-          <Button variant="contained" onClick={handleSave}>Save</Button>
+          <Button onClick={() => setOpenForm(false)} disabled={saving}>Cancel</Button>
+          <Button variant="contained" onClick={handleSave} disabled={saving}>
+            {saving ? "Saving..." : "Save"}
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>

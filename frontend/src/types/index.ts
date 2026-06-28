@@ -129,6 +129,8 @@ export interface MoU {
   };
   document: number | Document;
   document_details?: Document;
+  document_file?: string;
+  document_title?: string;
   start_date: string;
   end_date: string;
   status: MouStatus;

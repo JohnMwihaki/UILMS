@@ -145,10 +145,11 @@ export const Login: React.FC = () => {
           to="/"
           startIcon={<ArrowBack />}
           sx={{
-            position: "absolute",
-            top: 30,
-            mb: 10,
-            left: 24,
+            position: { xs: "relative", sm: "absolute" },
+            top: { xs: "auto", sm: 30 },
+            left: { xs: "auto", sm: 24 },
+            alignSelf: { xs: "flex-start", sm: "auto" },
+            mb: { xs: 4, sm: 0 },
             fontWeight: 700,
             color: "primary.main",
             "&:hover": {
