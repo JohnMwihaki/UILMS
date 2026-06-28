@@ -17,6 +17,12 @@ ALLOWED_HOSTS = config(
     cast=lambda v: [host.strip() for host in v.split(",")]
 )
 
+# Automatically add Render external hostname if running on Render
+if config("RENDER", default=False, cast=bool):
+    RENDER_EXTERNAL_HOSTNAME = config("RENDER_EXTERNAL_HOSTNAME", default=None)
+    if RENDER_EXTERNAL_HOSTNAME and RENDER_EXTERNAL_HOSTNAME not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
+
 # ==========================
 # APPLICATIONS
 # ==========================
